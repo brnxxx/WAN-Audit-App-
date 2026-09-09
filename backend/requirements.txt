@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+sqlalchemy
+pymysql
+python-dotenv
+requests
+httpx
+netmiko
+paramiko
+passlib
+bcrypt==4.0.1
+itsdangerous
+email-validator
