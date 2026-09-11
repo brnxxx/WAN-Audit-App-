@@ -6,7 +6,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import SECRET_KEY, SESSION_MAX_AGE_SECONDS
 from app.routers import auth
-
+from app.routers import gns3
 app = FastAPI(title="GNS3 Monitoring API")
 
 app.add_middleware(
@@ -27,6 +27,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(gns3.router)
 
 
 # ⚠️ TEMPORAIRE — à retirer avant toute mise en prod.
