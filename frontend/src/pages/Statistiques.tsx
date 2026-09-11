@@ -1,3 +1,11 @@
+import { PageHeader } from "../components/PageHeader";
+
 export function Statistiques() {
-  return <h1 className="text-2xl font-semibold text-gray-800">Tableau de bord BI</h1>;
+  return (
+    <PageHeader
+      path="~/dashboard/statistiques"
+      title="Statistiques"
+      subtitle="Vue d'ensemble de l'infrastructure"
+    />
+  );
 }
