@@ -5,13 +5,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import SECRET_KEY, SESSION_MAX_AGE_SECONDS
-from app.routers import auth
-from app.routers import gns3
+from app.routers import auth, gns3, devices, sites, backbone, interfaces
+
 app = FastAPI(title="GNS3 Monitoring API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+    allow_origins=[
+        "http://127.0.0.1:5500", "http://localhost:5500",
+        "http://127.0.0.1:5173", "http://localhost:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -28,18 +31,17 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(gns3.router)
+app.include_router(devices.router)
+app.include_router(sites.router)
+app.include_router(backbone.router)
+app.include_router(interfaces.router)
 
 
-# ⚠️ TEMPORAIRE — à retirer avant toute mise en prod.
-# Affiche la traceback complète en réponse JSON au lieu d'un 500 opaque.
 @app.exception_handler(Exception)
 async def debug_exception_handler(request: Request, exc: Exception):
     tb = traceback.format_exc()
-    print(tb)  # toujours visible dans le terminal aussi
-    return JSONResponse(
-        status_code=500,
-        content={"error": str(exc), "traceback": tb},
-    )
+    print(tb)
+    return JSONResponse(status_code=500, content={"error": str(exc), "traceback": tb})
 
 
 @app.get("/")
