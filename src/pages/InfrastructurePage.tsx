@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { apiGet, apiPost, API_BASE, UnauthorizedError } from "../api/client";
 import type { DeviceOut, GNS3Project, ImportResult } from "../api/types";
 
@@ -90,11 +90,16 @@ export default function InfrastructurePage() {
 
   return (
     <>
-      <div className="topbar">
+            <div className="topbar">
         <div className="brand">
           <span className="brand-dot" />
           WAN Audit
         </div>
+        <nav className="topnav">
+          <Link to="/infrastructure" className="topnav-link active">Infrastructure</Link>
+          <Link to="/equipements" className="topnav-link">Équipements</Link>
+                    <Link to="/sites-backbone" className="topnav-link">Sites & Backbone</Link>
+        </nav>
         <button className="logout-btn" onClick={handleLogout}>Se déconnecter</button>
       </div>
 
