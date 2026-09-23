@@ -127,7 +127,8 @@ export default function InfrastructurePage() {
         <nav className="topnav">
           <Link to="/infrastructure" className="topnav-link active">Infrastructure</Link>
           <Link to="/equipements" className="topnav-link">Équipements</Link>
-                    <Link to="/sites-backbone" className="topnav-link">Sites & Backbone</Link>
+          <Link to="/gns3-operations" className="topnav-link">GNS3 Ops</Link>
+          <Link to="/sites-backbone" className="topnav-link">Sites & Backbone</Link>
         </nav>
         <button className="logout-btn" onClick={handleLogout}>Se déconnecter</button>
       </div>
@@ -200,6 +201,7 @@ export default function InfrastructurePage() {
             {importing ? "Import en cours..." : "Importer"}
           </button>
           <button className="refresh-btn" onClick={loadDevices}>Rafraîchir la liste</button>
+          <Link to="/gns3-operations" className="refresh-btn ops-link">Ouvrir GNS3 Ops →</Link>
           <input
             className="search-input"
             type="search"

@@ -89,6 +89,17 @@ def diagnostic_ping(payload: dict, current_admin: Admin = Depends(get_current_ad
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+@router.post("/diagnostics/traceroute")
+def diagnostic_traceroute(payload: dict, current_admin: Admin = Depends(get_current_admin)):
+    target = payload.get("target")
+    if not isinstance(target, str):
+        raise HTTPException(status_code=422, detail="target est invalide")
+    try:
+        return gns3_service.traceroute_host(target)
+    except gns3_service.GNS3ServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @router.post("/projects/{project_id}/import")
 def import_project(
     project_id: str,

@@ -78,11 +78,11 @@ def get_project(project_id: str) -> dict:
 
 
 def start_project(project_id: str) -> dict:
-    return _action(f"/v2/projects/{project_id}/open")
+    return _action(f"/v2/projects/{project_id}/open", "put")
 
 
 def stop_project(project_id: str) -> dict:
-    return _action(f"/v2/projects/{project_id}/close")
+    return _action(f"/v2/projects/{project_id}/close", "put")
 
 
 def start_node(project_id: str, node_id: str) -> dict:
@@ -116,6 +116,24 @@ def ping_host(target: str, count: int = 4) -> dict:
     }
 
 
+def traceroute_host(target: str) -> dict:
+    try:
+        ipaddress.ip_address(target)
+    except ValueError as exc:
+        raise GNS3ServiceError("La cible doit être une adresse IP valide") from exc
+    if platform.system() == "Windows":
+        command = ["tracert", "-d", "-h", "12", "-w", "1000", target]
+    else:
+        command = ["traceroute", "-n", "-m", "12", "-w", "1", target]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=20, check=False)
+    except FileNotFoundError as exc:
+        raise GNS3ServiceError("L'outil traceroute/tracert n'est pas disponible sur le serveur") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise GNS3ServiceError("Le traceroute a dépassé le délai maximal") from exc
+    return {"target": target, "reachable": result.returncode == 0, "return_code": result.returncode, "output": (result.stdout or result.stderr)[-5000:]}
+
+
 COMMAND_GUIDE = [
     {"platform": "Cisco IOS", "category": "Interfaces", "command": "show ip interface brief", "purpose": "Vue rapide des interfaces, adresses IP et états.", "risk": "read-only"},
     {"platform": "Cisco IOS", "category": "Routing", "command": "show ip route", "purpose": "Afficher la table de routage IPv4.", "risk": "read-only"},
@@ -133,8 +151,8 @@ COMMAND_GUIDE = [
     {"platform": "Linux", "category": "Performance", "command": "ss -tulpn", "purpose": "Lister les ports et sockets à l'écoute.", "risk": "read-only"},
     {"platform": "GNS3 API", "category": "Projects", "command": "GET /v2/projects", "purpose": "Lister les projets disponibles.", "risk": "read-only"},
     {"platform": "GNS3 API", "category": "Projects", "command": "GET /v2/projects/{project_id}/nodes", "purpose": "Lister les nœuds d'un projet.", "risk": "read-only"},
-    {"platform": "GNS3 API", "category": "Projects", "command": "POST /v2/projects/{project_id}/open", "purpose": "Démarrer un projet GNS3.", "risk": "state-changing"},
-    {"platform": "GNS3 API", "category": "Projects", "command": "POST /v2/projects/{project_id}/close", "purpose": "Arrêter un projet GNS3.", "risk": "state-changing"},
+    {"platform": "GNS3 API", "category": "Projects", "command": "PUT /v2/projects/{project_id}/open", "purpose": "Démarrer un projet GNS3.", "risk": "state-changing"},
+    {"platform": "GNS3 API", "category": "Projects", "command": "PUT /v2/projects/{project_id}/close", "purpose": "Arrêter un projet GNS3.", "risk": "state-changing"},
 ]
 
 

@@ -44,6 +44,10 @@ export interface GNS3Node {
   node_type: string;
   status?: string;
 }
+export interface GNS3Link {
+  link_id: string;
+  nodes: Array<{ node_id: string; label?: { text?: string } }>;
+}
 export interface GNS3Command {
   platform: string;
   category: string;
@@ -57,6 +61,7 @@ export interface PingResult {
   return_code: number;
   output: string;
 }
+export type TraceResult = PingResult;
 export interface SiteOut {
   id: number;
   name: string;

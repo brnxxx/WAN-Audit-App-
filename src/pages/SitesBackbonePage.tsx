@@ -161,6 +161,7 @@ export default function SitesBackbonePage() {
         <nav className="topnav">
           <Link to="/infrastructure" className="topnav-link">Infrastructure</Link>
           <Link to="/equipements" className="topnav-link">Équipements</Link>
+          <Link to="/gns3-operations" className="topnav-link">GNS3 Ops</Link>
           <Link to="/sites-backbone" className="topnav-link active">Sites & Backbone</Link>
         </nav>
         <button className="logout-btn" onClick={handleLogout}>Se déconnecter</button>
