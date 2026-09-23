@@ -101,6 +101,8 @@ def import_project_topology(db: Session, project_id: str) -> dict:
         gns3_node_id = node["node_id"]
         name = node["name"]
         node_type = node.get("node_type", "other")
+        console_host = node.get("console_host")
+        console_port = node.get("console")
 
         device = db.query(Device).filter(Device.gns3_node_id == gns3_node_id).first()
         is_new = device is None
@@ -118,6 +120,8 @@ def import_project_topology(db: Session, project_id: str) -> dict:
         device.gns3_project_id = project_id
         device.site_id = site_id
         device.backbone_id = backbone_id
+        device.console_host = console_host
+        device.console_port = console_port
 
         db.flush()  # pour obtenir device.id même si nouveau
 

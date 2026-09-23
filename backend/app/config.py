@@ -10,7 +10,8 @@ DB_USER = os.getenv("DB_USER", "root")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 GNS3_USERNAME = os.getenv("GNS3_USERNAME", "")
 GNS3_PASSWORD = os.getenv("GNS3_PASSWORD", "")
-
+DEVICE_SSH_USERNAME = os.getenv("DEVICE_SSH_USERNAME")
+DEVICE_SSH_PASSWORD = os.getenv("DEVICE_SSH_PASSWORD")
 GNS3_URL = os.getenv("GNS3_URL", "http://127.0.0.1:3080")
 
 SECRET_KEY = os.getenv("SECRET_KEY")

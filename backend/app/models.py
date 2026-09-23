@@ -48,6 +48,8 @@ class Backbone(Base):
 
 class Device(Base):
     __tablename__ = "devices"
+    console_host: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    console_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)

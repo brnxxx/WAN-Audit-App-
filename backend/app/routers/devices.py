@@ -5,6 +5,7 @@ from app.database import get_db
 from app.models import Device, Admin
 from app.schemas import DeviceOut, DeviceCreate
 from app.routers.auth import get_current_admin
+from app.services import netmiko_service
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -60,3 +61,11 @@ def delete_device(device_id: int, db: Session = Depends(get_db), current_admin: 
         raise HTTPException(status_code=404, detail="Device introuvable")
     db.delete(device)
     db.commit()
+
+
+@router.post("/{device_id}/sync-ip")
+def sync_device_ip(device_id: int, db: Session = Depends(get_db), current_admin: Admin = Depends(get_current_admin)):
+    try:
+        return netmiko_service.sync_device_ips(db, device_id)
+    except netmiko_service.CiscoServiceError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
