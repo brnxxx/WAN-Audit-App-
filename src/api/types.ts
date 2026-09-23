@@ -55,13 +55,48 @@ export interface GNS3Command {
   purpose: string;
   risk: "read-only" | "state-changing";
 }
+export interface RouterCommandResult {
+  project_id: string;
+  source_node_id: string;
+  source: string;
+  command: string;
+  output: string;
+}
 export interface PingResult {
   target: string;
   reachable: boolean;
   return_code: number;
+  packets_sent: number;
+  packets_received: number;
+  packet_loss_percent: number;
+  latency_min_ms: number | null;
+  latency_avg_ms: number | null;
+  latency_max_ms: number | null;
   output: string;
+  source: string;
+  execution: "server" | "gns3-node";
 }
-export type TraceResult = PingResult;
+export interface TraceResult {
+  target: string;
+  reachable: boolean;
+  return_code: number;
+  hop_count: number;
+  hops: Array<{ hop: number; detail: string }>;
+  output: string;
+  source: string;
+  execution: "server" | "gns3-node";
+}
+export interface InfrastructureLog {
+  id: number;
+  project_id: string;
+  event_type: "ping" | "traceroute" | "error" | string;
+  status: "ok" | "issue" | "error" | string;
+  source: string | null;
+  target: string | null;
+  message: string;
+  details: string | null;
+  created_at: string;
+}
 export interface SiteOut {
   id: number;
   name: string;

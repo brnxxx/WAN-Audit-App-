@@ -20,6 +20,26 @@ export async function apiGet<T>(path: string): Promise<T> {
   return handle<T>(res);
 }
 
+export async function apiDownload(path: string, fallbackFilename: string): Promise<void> {
+  const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });
+  if (res.status === 401) throw new UnauthorizedError();
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new ApiError(data.detail || `Erreur ${res.status}`);
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition");
+  const filename = disposition?.match(/filename="([^"]+)"/i)?.[1] || fallbackFilename;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, type CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiGet, apiPost, API_BASE, UnauthorizedError } from "../api/client";
-import type { DeviceOut, GNS3Project, ImportResult } from "../api/types";
+import type { DeviceOut, GNS3Project, ImportResult, InfrastructureLog } from "../api/types";
 
 const STATUS_LABELS: Record<string, string> = {
   online: "En ligne",
@@ -20,6 +20,8 @@ export default function InfrastructurePage() {
   const [devices, setDevices] = useState<DeviceOut[] | null>(null);
   const [devicesError, setDevicesError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [logs, setLogs] = useState<InfrastructureLog[]>([]);
+  const [logsError, setLogsError] = useState<string | null>(null);
 
   const [importing, setImporting] = useState(false);
   const [importSummary, setImportSummary] = useState<{ text: string; error: boolean } | null>(null);
@@ -82,9 +84,26 @@ export default function InfrastructurePage() {
     }
   }, [handleUnauthorized]);
 
+  const loadLogs = useCallback(async (project: string) => {
+    if (!project) {
+      setLogs([]);
+      return;
+    }
+    try {
+      setLogs(await apiGet<InfrastructureLog[]>(`/gns3/projects/${project}/logs?limit=100`));
+      setLogsError(null);
+    } catch (err) {
+      if (err instanceof UnauthorizedError) return handleUnauthorized();
+      setLogsError("Impossible de charger le journal de cette infrastructure.");
+    }
+  }, [handleUnauthorized]);
+
   useEffect(() => {
     void Promise.resolve().then(() => Promise.all([loadProjects(), loadDevices()]));
   }, [loadProjects, loadDevices]);
+  useEffect(() => {
+    void Promise.resolve().then(() => loadLogs(selectedProject));
+  }, [loadLogs, selectedProject]);
 
   async function handleImport() {
     if (!selectedProject) return;
@@ -200,8 +219,9 @@ export default function InfrastructurePage() {
           <button className="import-btn" onClick={handleImport} disabled={!selectedProject || importing}>
             {importing ? "Import en cours..." : "Importer"}
           </button>
-          <button className="refresh-btn" onClick={loadDevices}>Rafraîchir la liste</button>
+          <button className="refresh-btn" onClick={() => { void loadDevices(); void loadLogs(selectedProject); }}>Rafraîchir la liste</button>
           <Link to="/gns3-operations" className="refresh-btn ops-link">Ouvrir GNS3 Ops →</Link>
+          <Link to="/infrastructure-logs" className="refresh-btn ops-link">Voir les logs →</Link>
           <input
             className="search-input"
             type="search"
@@ -259,6 +279,28 @@ export default function InfrastructurePage() {
             </tbody>
           </table>
         </div>
+        <section className="monitor-card infrastructure-log-card">
+          <div className="card-heading">
+            <span className="eyebrow">AUDIT / INFRASTRUCTURE LOG</span>
+            <button className="link-btn" onClick={() => loadLogs(selectedProject)} disabled={!selectedProject}>Actualiser</button>
+          </div>
+          <h2>Journal de l'infrastructure sélectionnée</h2>
+          <p className="muted-copy">Historique isolé du projet GNS3 sélectionné : pings, connectivité, traceroutes et erreurs.</p>
+          {logsError && <p className="empty-state">{logsError}</p>}
+          {!logsError && logs.length === 0 && <p className="empty-state">Aucun événement enregistré pour cette infrastructure.</p>}
+          {logs.length > 0 && <div className="infrastructure-log-list">
+            {logs.map((log) => (
+              <article className={`infrastructure-log-row ${log.status}`} key={log.id}>
+                <span className="log-status-dot" />
+                <div className="log-main">
+                  <strong>{log.message}</strong>
+                  <small>{log.event_type.toUpperCase()} · {log.target || "—"} · source : {log.source || "—"}</small>
+                </div>
+                <time dateTime={log.created_at}>{new Date(log.created_at).toLocaleString()}</time>
+              </article>
+            ))}
+          </div>}
+        </section>
       </div>
     </>
   );

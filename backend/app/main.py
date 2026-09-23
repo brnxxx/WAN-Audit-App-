@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import SECRET_KEY, SESSION_MAX_AGE_SECONDS, FRONTEND_ORIGINS
+from app.database import Base, engine
 from app.routers import auth, gns3, devices, sites, backbone, interfaces
 
 app = FastAPI(title="GNS3 Monitoring API")
@@ -17,6 +18,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def create_missing_tables():
+    # Keeps the new infrastructure log table available on existing installations.
+    Base.metadata.create_all(bind=engine)
 
 app.add_middleware(
     SessionMiddleware,

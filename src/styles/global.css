@@ -432,9 +432,40 @@ button:hover:not(:disabled) { transform: translateY(-1px); }
 .diagnostic-form { display:flex; gap:8px; }
 .diagnostic-secondary { margin-top:9px; }
 .diagnostic-form input { flex:1; min-width:0; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius); font:13px 'IBM Plex Mono',monospace; }
-.diagnostic-result { white-space:pre-wrap; overflow:auto; min-height:100px; margin-top:18px; padding:15px; border-radius:10px; font:11px 'IBM Plex Mono',monospace; background:#050a11; border:1px solid var(--border); color:var(--text-muted); }
+.diagnostic-result { overflow:auto; min-height:100px; margin-top:18px; padding:15px; border-radius:10px; font:11px 'IBM Plex Mono',monospace; background:#050a11; border:1px solid var(--border); color:var(--text-muted); }
+.diagnostic-result > pre { white-space:pre-wrap; margin:14px 0 0; color:inherit; font:inherit; }
+.diagnostic-metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:14px; }
+.diagnostic-metrics span { padding:8px; border:1px solid var(--border); border-radius:7px; color:var(--text-muted); }
+.diagnostic-metrics b { display:block; color:var(--text-primary); margin-top:4px; }
+.infrastructure-log-card { margin-top: 22px; }
+.export-btn { padding:9px 12px; border:1px solid rgba(70,230,164,.45); border-radius:var(--radius); background:rgba(70,230,164,.1); color:var(--status-ok); cursor:pointer; font:11px 'IBM Plex Mono',monospace; }
+.export-btn.pdf { border-color:rgba(98,230,255,.45); background:rgba(98,230,255,.1); color:var(--accent); }
+.export-btn:disabled { opacity:.5; cursor:not-allowed; }
+.infrastructure-log-list { display:grid; gap:8px; margin-top:16px; }
+.infrastructure-log-row { display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid var(--border); border-radius:9px; background:rgba(8,18,31,.58); }
+.infrastructure-log-row.issue { border-color:rgba(245,166,35,.45); }
+.infrastructure-log-row.error { border-color:rgba(255,86,110,.5); }
+.log-status-dot { width:8px; height:8px; flex:0 0 auto; border-radius:50%; background:var(--accent); box-shadow:0 0 10px var(--accent); }
+.infrastructure-log-row.issue .log-status-dot { background:#f5a623; box-shadow:0 0 10px #f5a623; }
+.infrastructure-log-row.error .log-status-dot { background:#ff566e; box-shadow:0 0 10px #ff566e; }
+.log-main { display:grid; gap:4px; flex:1; min-width:0; }
+.log-main strong { color:var(--text-primary); }
+.log-main small, .infrastructure-log-row time { color:var(--text-muted); font-size:11px; }
+.infrastructure-log-row time { white-space:nowrap; }
+.hop-list { display:grid; gap:6px; margin-top:14px; }
+.hop-list div { display:grid; grid-template-columns:28px 1fr; gap:8px; color:#c5d6e9; }
+.hop-list b { color:var(--accent); }
 .diagnostic-result.ok { color:var(--status-ok); border-color:rgba(70,230,164,.4); }
 .diagnostic-result.bad { color:var(--status-bad); border-color:rgba(255,107,129,.4); }
+.router-console-card { margin-top:22px; }
+.router-command-form { display:grid; grid-template-columns:1fr 1.5fr 1.5fr auto; gap:8px; margin-top:16px; }
+.router-command-form select, .router-command-form input { min-width:0; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius); background:#08131f; color:var(--text-primary); font:12px 'IBM Plex Mono',monospace; }
+.router-command-form input { color:var(--text-primary); }
+.router-command-form select:disabled, .router-command-form input:disabled { opacity:.55; }
+.command-output { margin-top:16px; border:1px solid rgba(98,230,255,.35); border-radius:10px; overflow:hidden; background:#050a11; }
+.command-output-heading { display:flex; justify-content:space-between; gap:12px; padding:11px 14px; border-bottom:1px solid var(--border); color:var(--accent); font:11px 'IBM Plex Mono',monospace; }
+.command-output-heading span { color:var(--text-muted); }
+.command-output pre { max-height:420px; overflow:auto; margin:0; padding:16px; color:#c8d8e8; white-space:pre-wrap; font:12px/1.5 'IBM Plex Mono',monospace; }
 .command-guide { margin-bottom:22px; }
 .command-guide > .search-input { width:100%; margin-bottom:18px; }
 .command-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; }

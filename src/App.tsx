@@ -4,6 +4,7 @@ import InfrastructurePage from "./pages/InfrastructurePage";
 import EquipmentsPage from "./pages/EquipmentsPage";
 import SitesBackbonePage from "./pages/SitesBackbonePage";
 import GNS3OperationsPage from "./pages/GNS3OperationsPage";
+import InfrastructureLogsPage from "./pages/InfrastructureLogsPage";
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/equipements" element={<EquipmentsPage />} />
         <Route path="/sites-backbone" element={<SitesBackbonePage />} />
         <Route path="/gns3-operations" element={<GNS3OperationsPage />} />
+        <Route path="/infrastructure-logs" element={<InfrastructureLogsPage />} />
       </Routes>
     </BrowserRouter>
   );

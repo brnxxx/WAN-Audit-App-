@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiGet, apiPost, API_BASE, UnauthorizedError } from "../api/client";
-import type { GNS3Command, GNS3Link, GNS3Node, GNS3Project, PingResult, TraceResult } from "../api/types";
+import type { GNS3Command, GNS3Link, GNS3Node, GNS3Project, PingResult, RouterCommandResult, TraceResult } from "../api/types";
 
 export default function GNS3OperationsPage() {
   const navigate = useNavigate();
@@ -12,9 +12,15 @@ export default function GNS3OperationsPage() {
   const [commands, setCommands] = useState<GNS3Command[]>([]);
   const [query, setQuery] = useState("");
   const [target, setTarget] = useState("");
+  const [sourceNodeId, setSourceNodeId] = useState("");
   const [ping, setPing] = useState<PingResult | null>(null);
   const [trace, setTrace] = useState<TraceResult | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [commandNodeId, setCommandNodeId] = useState("");
+  const [selectedCommand, setSelectedCommand] = useState("show ip interface brief");
+  const [customCommand, setCustomCommand] = useState("");
+  const [commandResult, setCommandResult] = useState<RouterCommandResult | null>(null);
+  const [commandRunning, setCommandRunning] = useState(false);
 
   const authFailure = useCallback((error: unknown) => {
     if (error instanceof UnauthorizedError) navigate("/login");
@@ -59,6 +65,17 @@ export default function GNS3OperationsPage() {
     return commands.filter((item) => `${item.platform} ${item.category} ${item.command} ${item.purpose}`.toLowerCase().includes(value));
   }, [commands, query]);
 
+  const routerNodes = useMemo(
+    () => nodes.filter((node) => ["dynamips", "iou", "qemu"].includes(node.node_type.toLowerCase())),
+    [nodes],
+  );
+
+  useEffect(() => {
+    if (!routerNodes.some((node) => node.node_id === commandNodeId)) {
+      void Promise.resolve().then(() => setCommandNodeId(routerNodes[0]?.node_id || ""));
+    }
+  }, [commandNodeId, routerNodes]);
+
   async function control(path: string, label: string) {
     try {
       await apiPost(path);
@@ -76,15 +93,37 @@ export default function GNS3OperationsPage() {
   async function runPing(event: React.FormEvent) {
     event.preventDefault();
     try {
-      setPing(await apiPost<PingResult>("/gns3/diagnostics/ping", { target, count: 4 }));
+      setPing(await apiPost<PingResult>("/gns3/diagnostics/ping", {
+        target: target.trim(), count: 4, project_id: projectId, source_node_id: sourceNodeId || null,
+      }));
     } catch (error) { authFailure(error); }
   }
 
   async function runTrace(event: React.FormEvent) {
     event.preventDefault();
     try {
-      setTrace(await apiPost<TraceResult>("/gns3/diagnostics/traceroute", { target }));
+      setTrace(await apiPost<TraceResult>("/gns3/diagnostics/traceroute", {
+        target: target.trim(), project_id: projectId, source_node_id: sourceNodeId || null,
+      }));
     } catch (error) { authFailure(error); }
+  }
+
+  async function runRouterCommand(event: React.FormEvent) {
+    event.preventDefault();
+    if (!projectId || !commandNodeId) {
+      setMessage("Sélectionnez un projet et un routeur avant d'exécuter une commande.");
+      return;
+    }
+    const command = customCommand.trim() || selectedCommand;
+    try {
+      setCommandRunning(true);
+      setCommandResult(await apiPost<RouterCommandResult>(
+        `/gns3/projects/${projectId}/nodes/command`,
+        { source_node_id: commandNodeId, command },
+      ));
+      setMessage(`Commande exécutée sur ${routerNodes.find((node) => node.node_id === commandNodeId)?.name || "le routeur"}.`);
+    } catch (error) { authFailure(error); }
+    finally { setCommandRunning(false); }
   }
 
   async function logout() {
@@ -100,6 +139,7 @@ export default function GNS3OperationsPage() {
           <Link to="/infrastructure" className="topnav-link">Infrastructure</Link>
           <Link to="/equipements" className="topnav-link">Équipements</Link>
           <Link to="/gns3-operations" className="topnav-link active">GNS3 Ops</Link>
+          <Link to="/infrastructure-logs" className="topnav-link">Logs</Link>
           <Link to="/sites-backbone" className="topnav-link">Sites & Backbone</Link>
         </nav>
         <button className="logout-btn" onClick={logout}>Se déconnecter</button>
@@ -128,12 +168,40 @@ export default function GNS3OperationsPage() {
           <section className="monitor-card">
             <div className="card-heading"><span className="eyebrow">DIAGNOSTICS / REACHABILITY</span><span className="card-icon">⌁</span></div>
             <h2>Ping sécurisé</h2>
+            <select className="diagnostic-source" value={sourceNodeId} onChange={(event) => setSourceNodeId(event.target.value)}>
+              <option value="">Source : serveur backend</option>
+              {nodes.map((node) => <option key={node.node_id} value={node.node_id}>Source : {node.name} · {node.status || "unknown"}</option>)}
+            </select>
             <form className="diagnostic-form" onSubmit={runPing}><input type="text" placeholder="Adresse IPv4 ou IPv6" value={target} onChange={(event) => setTarget(event.target.value)} required /><button className="import-btn">Ping</button></form>
             <form className="diagnostic-form diagnostic-secondary" onSubmit={runTrace}><input type="text" placeholder="Même cible pour tracer le chemin" value={target} onChange={(event) => setTarget(event.target.value)} required /><button className="refresh-btn">Traceroute</button></form>
-            {ping && <pre className={`diagnostic-result ${ping.reachable ? "ok" : "bad"}`}>{ping.reachable ? "● JOIGNABLE" : "● INJOIGNABLE"}{"\n"}{ping.output}</pre>}
-            {trace && <pre className="diagnostic-result">{`● CHEMIN RÉSEAU\n${trace.output}`}</pre>}
+            {ping && <div className={`diagnostic-result ${ping.reachable ? "ok" : "bad"}`}>
+              <strong>{ping.reachable ? "● JOIGNABLE" : "● INJOIGNABLE"} · {ping.source}</strong>
+              <div className="diagnostic-metrics"><span>Perte <b>{ping.packet_loss_percent}%</b></span><span>Min <b>{ping.latency_min_ms == null ? "—" : `${ping.latency_min_ms} ms`}</b></span><span>Moy. <b>{ping.latency_avg_ms == null ? "—" : `${ping.latency_avg_ms} ms`}</b></span><span>Max <b>{ping.latency_max_ms == null ? "—" : `${ping.latency_max_ms} ms`}</b></span></div>
+              <pre>{ping.output}</pre>
+            </div>}
+            {trace && <div className="diagnostic-result"><strong>● CHEMIN RÉSEAU · {trace.hop_count} SAUTS · {trace.source}</strong><div className="hop-list">{trace.hops.map((hop) => <div key={hop.hop}><b>{hop.hop}</b><span>{hop.detail}</span></div>)}</div><pre>{trace.output}</pre></div>}
           </section>
         </div>
+        <section className="monitor-card router-console-card">
+          <div className="card-heading"><span className="eyebrow">ROUTER CONSOLE / READ-ONLY COMMANDS</span><span className="card-icon">⌘</span></div>
+          <h2>Tester des commandes Cisco IOS</h2>
+          <p className="muted-copy">Sélectionnez d'abord un routeur du projet. Seules les commandes de diagnostic en lecture sont autorisées.</p>
+          <form className="router-command-form" onSubmit={runRouterCommand}>
+            <select value={commandNodeId} onChange={(event) => setCommandNodeId(event.target.value)} disabled={!routerNodes.length}>
+              {!routerNodes.length && <option value="">Aucun routeur compatible chargé</option>}
+              {routerNodes.map((node) => <option key={node.node_id} value={node.node_id}>{node.name} · {node.node_type} · {node.status || "unknown"}</option>)}
+            </select>
+            <select value={selectedCommand} onChange={(event) => { setSelectedCommand(event.target.value); setCustomCommand(""); }} disabled={!routerNodes.length}>
+              {commands.filter((item) => item.platform === "Cisco IOS" && item.risk === "read-only").map((item) => <option key={item.command} value={item.command}>{item.command}</option>)}
+            </select>
+            <input value={customCommand} onChange={(event) => setCustomCommand(event.target.value)} placeholder="Ou saisir une commande autorisée..." disabled={!routerNodes.length} />
+            <button className="import-btn" disabled={!routerNodes.length || commandRunning}>{commandRunning ? "Exécution..." : "Exécuter"}</button>
+          </form>
+          {commandResult && <div className="command-output">
+            <div className="command-output-heading"><strong>{commandResult.command}</strong><span>Source : {commandResult.source}</span></div>
+            <pre>{commandResult.output}</pre>
+          </div>}
+        </section>
         <section className="monitor-card topology-card">
           <div className="card-heading"><span className="eyebrow">TOPOLOGY / LIVE SCHEME</span><span className="card-icon">⌘</span></div>
           <h2>Schéma logique du projet <span className="topology-count">{nodes.length} nœuds · {links.length} liens</span></h2>

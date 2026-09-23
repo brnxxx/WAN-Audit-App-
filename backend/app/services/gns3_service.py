@@ -4,9 +4,11 @@ import platform
 import subprocess
 
 import httpx
+from netmiko import ConnectHandler
+from netmiko.exceptions import NetmikoAuthenticationException, NetmikoTimeoutException
 from sqlalchemy.orm import Session
 
-from app.config import GNS3_URL
+from app.config import DEVICE_SSH_PASSWORD, DEVICE_SSH_USERNAME, GNS3_URL
 from app.models import Device, Interface, TopologyLink, Site, Backbone, GNS3Project
 
 
@@ -33,7 +35,11 @@ def _get(endpoint: str) -> list[dict] | dict:
     except httpx.RequestError as exc:
         raise GNS3ServiceError(f"Impossible de contacter GNS3 : {exc}")
     except httpx.HTTPStatusError as exc:
-        raise GNS3ServiceError(f"GNS3 a renvoyé une erreur : {exc.response.status_code}")
+        allow = exc.response.headers.get("allow")
+        suffix = f" (méthodes acceptées : {allow})" if allow else ""
+        raise GNS3ServiceError(
+            f"GNS3 a renvoyé une erreur : {exc.response.status_code}{suffix}"
+        )
 
 
 def get_projects() -> list[dict]:
@@ -48,6 +54,11 @@ def get_project_nodes(project_id: str) -> list[dict]:
     if isinstance(data, list):
         return data
     return []
+
+
+def get_project_node(project_id: str, node_id: str) -> dict:
+    data = _get(f"/v2/projects/{project_id}/nodes/{node_id}")
+    return data if isinstance(data, dict) else {}
 
 
 def get_project_links(project_id: str) -> list[dict]:
@@ -69,7 +80,11 @@ def _action(endpoint: str, method: str = "post") -> dict:
     except httpx.RequestError as exc:
         raise GNS3ServiceError(f"Impossible de contacter GNS3 : {exc}")
     except httpx.HTTPStatusError as exc:
-        raise GNS3ServiceError(f"GNS3 a renvoyé une erreur : {exc.response.status_code}")
+        allow = exc.response.headers.get("allow")
+        suffix = f" (méthodes acceptées : {allow})" if allow else ""
+        raise GNS3ServiceError(
+            f"GNS3 a renvoyé une erreur : {exc.response.status_code}{suffix}"
+        )
 
 
 def get_project(project_id: str) -> dict:
@@ -78,11 +93,12 @@ def get_project(project_id: str) -> dict:
 
 
 def start_project(project_id: str) -> dict:
-    return _action(f"/v2/projects/{project_id}/open", "put")
+    # GNS3 exposes project lifecycle actions as POST endpoints.
+    return _action(f"/v2/projects/{project_id}/open")
 
 
 def stop_project(project_id: str) -> dict:
-    return _action(f"/v2/projects/{project_id}/close", "put")
+    return _action(f"/v2/projects/{project_id}/close")
 
 
 def start_node(project_id: str, node_id: str) -> dict:
@@ -97,41 +113,187 @@ def reload_node(project_id: str, node_id: str) -> dict:
     return _action(f"/v2/projects/{project_id}/nodes/{node_id}/reload")
 
 
-def ping_host(target: str, count: int = 4) -> dict:
+def _validate_target(target: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
     try:
-        ipaddress.ip_address(target)
+        return ipaddress.ip_address(target)
     except ValueError as exc:
         raise GNS3ServiceError("La cible doit être une adresse IP valide") from exc
-    count = max(1, min(count, 5))
-    command = ["ping", "-n" if platform.system() == "Windows" else "-c", str(count), target]
+
+
+def _run_from_node(project_id: str, source_node_id: str, command: str) -> tuple[str, str]:
+    node = get_project_node(project_id, source_node_id)
+    host = node.get("console_host")
+    port = node.get("console")
+    if not host or not port:
+        raise GNS3ServiceError(
+            f"Le nœud {node.get('name', source_node_id)} n'a pas de console GNS3 disponible"
+        )
     try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=15, check=False)
-    except subprocess.TimeoutExpired as exc:
-        raise GNS3ServiceError("Le ping a dépassé le délai maximal") from exc
+        conn = ConnectHandler(
+            device_type="cisco_ios_telnet",
+            host=host,
+            port=int(port),
+            username=DEVICE_SSH_USERNAME or "",
+            password=DEVICE_SSH_PASSWORD or "",
+            timeout=10,
+            auth_timeout=10,
+            banner_timeout=10,
+            fast_cli=False,
+        )
+        output = conn.send_command_timing(command, read_timeout=15)
+        conn.disconnect()
+    except (NetmikoTimeoutException, NetmikoAuthenticationException, OSError) as exc:
+        raise GNS3ServiceError(
+            f"Connexion impossible au nœud {node.get('name', source_node_id)} : {exc}"
+        ) from exc
+    return output, node.get("name", source_node_id)
+
+
+def execute_router_command(project_id: str, source_node_id: str, command: str) -> dict:
+    cleaned_command = " ".join(command.strip().split())
+    allowed_commands = {
+        item["command"]
+        for item in COMMAND_GUIDE
+        if item["platform"] == "Cisco IOS" and item["risk"] == "read-only"
+    }
+    if cleaned_command not in allowed_commands:
+        raise GNS3ServiceError(
+            "Commande refusée. Utilisez une commande Cisco IOS de lecture proposée par le guide."
+        )
+    node = get_project_node(project_id, source_node_id)
+    node_type = str(node.get("node_type") or "").lower()
+    if node_type not in {"dynamips", "iou", "qemu"}:
+        raise GNS3ServiceError("La console de commandes est réservée aux routeurs Cisco du projet")
+    output, source = _run_from_node(project_id, source_node_id, cleaned_command)
     return {
-        "target": target,
-        "reachable": result.returncode == 0,
-        "return_code": result.returncode,
-        "output": result.stdout[-4000:] or result.stderr[-4000:],
+        "project_id": project_id,
+        "source_node_id": source_node_id,
+        "source": source,
+        "command": cleaned_command,
+        "output": output[-12000:],
     }
 
 
-def traceroute_host(target: str) -> dict:
-    try:
-        ipaddress.ip_address(target)
-    except ValueError as exc:
-        raise GNS3ServiceError("La cible doit être une adresse IP valide") from exc
-    if platform.system() == "Windows":
-        command = ["tracert", "-d", "-h", "12", "-w", "1000", target]
+def _parse_ping_output(output: str, count: int, return_code: int, target: str) -> dict:
+    received_match = re.search(r"(\d+)\s*(?:packets? received|received)", output, re.IGNORECASE)
+    sent_match = re.search(r"(\d+)\s*(?:packets? transmitted|sent)", output, re.IGNORECASE)
+    loss_match = re.search(r"(\d+(?:[.,]\d+)?)\s*%\s*(?:packet )?loss", output, re.IGNORECASE)
+    rtt_match = re.search(r"=\s*([\d.,]+)\s*/\s*([\d.,]+)\s*/\s*([\d.,]+)", output)
+    if not rtt_match:
+        rtt_match = re.search(
+            r"minimum\s*=\s*([\d.,]+).*?maximum\s*=\s*([\d.,]+).*?average\s*=\s*([\d.,]+)",
+            output,
+            re.IGNORECASE,
+        )
+    cisco_match = re.search(r"\((\d+)\s*/\s*(\d+)\)", output)
+    if cisco_match:
+        packets_received = int(cisco_match.group(1))
+        packets_sent = int(cisco_match.group(2))
     else:
-        command = ["traceroute", "-n", "-m", "12", "-w", "1", target]
+        packets_sent = int(sent_match.group(1)) if sent_match else count
+        packets_received = int(received_match.group(1)) if received_match else (
+            packets_sent if return_code == 0 and output else 0
+        )
+    if not rtt_match:
+        rtt_match = re.search(
+            r"round-trip.*?=\s*([\d.,]+)\s*/\s*([\d.,]+)\s*/\s*([\d.,]+)",
+            output,
+            re.IGNORECASE,
+        )
+    packet_loss = (
+        float(loss_match.group(1).replace(",", "."))
+        if loss_match
+        else round((1 - packets_received / packets_sent) * 100, 1)
+        if packets_sent
+        else 100.0
+    )
+    return {
+        "target": target,
+        "reachable": packets_received > 0 and packet_loss < 100,
+        "return_code": return_code,
+        "packets_sent": packets_sent,
+        "packets_received": packets_received,
+        "packet_loss_percent": packet_loss,
+        "latency_min_ms": float(rtt_match.group(1).replace(",", ".")) if rtt_match else None,
+        "latency_avg_ms": float(rtt_match.group(2).replace(",", ".")) if rtt_match else None,
+        "latency_max_ms": float(rtt_match.group(3).replace(",", ".")) if rtt_match else None,
+        "output": output[-4000:],
+    }
+
+
+def ping_host(
+    target: str,
+    count: int = 4,
+    project_id: str | None = None,
+    source_node_id: str | None = None,
+) -> dict:
+    address = _validate_target(target)
+    count = max(1, min(count, 5))
+    if bool(project_id) != bool(source_node_id):
+        raise GNS3ServiceError("Le projet et le nœud source doivent être fournis ensemble")
+    if project_id and source_node_id:
+        output, source = _run_from_node(project_id, source_node_id, f"ping {target} repeat {count}")
+        result = _parse_ping_output(output, count, 0, target)
+        result.update({"source": source, "execution": "gns3-node"})
+        return result
+    family_flag = "-6" if address.version == 6 else "-4"
+    command = ["ping", family_flag]
+    command += ["-n", str(count)] if platform.system() == "Windows" else ["-c", str(count)]
+    command.append(target)
     try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=20, check=False)
-    except FileNotFoundError as exc:
-        raise GNS3ServiceError("L'outil traceroute/tracert n'est pas disponible sur le serveur") from exc
+        process = subprocess.run(command, capture_output=True, text=True, timeout=15, check=False)
     except subprocess.TimeoutExpired as exc:
-        raise GNS3ServiceError("Le traceroute a dépassé le délai maximal") from exc
-    return {"target": target, "reachable": result.returncode == 0, "return_code": result.returncode, "output": (result.stdout or result.stderr)[-5000:]}
+        raise GNS3ServiceError("Le ping a dépassé le délai maximal") from exc
+    output = process.stdout or process.stderr
+    result = _parse_ping_output(output, count, process.returncode, target)
+    result.update({"source": "Serveur backend", "execution": "server"})
+    return result
+
+
+def traceroute_host(
+    target: str,
+    project_id: str | None = None,
+    source_node_id: str | None = None,
+) -> dict:
+    address = _validate_target(target)
+    if bool(project_id) != bool(source_node_id):
+        raise GNS3ServiceError("Le projet et le nœud source doivent être fournis ensemble")
+    if project_id and source_node_id:
+        output, source = _run_from_node(project_id, source_node_id, f"traceroute {target}")
+        return_code = 0
+        execution = "gns3-node"
+    else:
+        family_flag = "-6" if address.version == 6 else "-4"
+        command = (
+            ["tracert", family_flag, "-d", "-h", "12", "-w", "1000", target]
+            if platform.system() == "Windows"
+            else ["traceroute", "-n", "-m", "12", "-w", "1", target]
+        )
+        try:
+            process = subprocess.run(command, capture_output=True, text=True, timeout=20, check=False)
+        except FileNotFoundError as exc:
+            raise GNS3ServiceError("L'outil traceroute/tracert n'est pas disponible sur le serveur") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise GNS3ServiceError("Le traceroute a dépassé le délai maximal") from exc
+        output = process.stdout or process.stderr
+        return_code = process.returncode
+        source = "Serveur backend"
+        execution = "server"
+    hops = []
+    for line in output.splitlines():
+        match = re.match(r"\s*(\d+)\s+(.*)", line)
+        if match:
+            hops.append({"hop": int(match.group(1)), "detail": match.group(2).strip()})
+    return {
+        "target": target,
+        "reachable": bool(hops) and return_code == 0,
+        "return_code": return_code,
+        "hop_count": len(hops),
+        "hops": hops,
+        "output": output[-5000:],
+        "source": source,
+        "execution": execution,
+    }
 
 
 COMMAND_GUIDE = [
@@ -151,8 +313,8 @@ COMMAND_GUIDE = [
     {"platform": "Linux", "category": "Performance", "command": "ss -tulpn", "purpose": "Lister les ports et sockets à l'écoute.", "risk": "read-only"},
     {"platform": "GNS3 API", "category": "Projects", "command": "GET /v2/projects", "purpose": "Lister les projets disponibles.", "risk": "read-only"},
     {"platform": "GNS3 API", "category": "Projects", "command": "GET /v2/projects/{project_id}/nodes", "purpose": "Lister les nœuds d'un projet.", "risk": "read-only"},
-    {"platform": "GNS3 API", "category": "Projects", "command": "PUT /v2/projects/{project_id}/open", "purpose": "Démarrer un projet GNS3.", "risk": "state-changing"},
-    {"platform": "GNS3 API", "category": "Projects", "command": "PUT /v2/projects/{project_id}/close", "purpose": "Arrêter un projet GNS3.", "risk": "state-changing"},
+    {"platform": "GNS3 API", "category": "Projects", "command": "POST /v2/projects/{project_id}/open", "purpose": "Démarrer un projet GNS3.", "risk": "state-changing"},
+    {"platform": "GNS3 API", "category": "Projects", "command": "POST /v2/projects/{project_id}/close", "purpose": "Arrêter un projet GNS3.", "risk": "state-changing"},
 ]
 
 

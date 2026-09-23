@@ -181,6 +181,20 @@ class GNS3Project(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class InfrastructureLog(Base):
+    __tablename__ = "infrastructure_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    project_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    source: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    target: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
 class TopologyLink(Base):
     __tablename__ = "topology_links"
 
