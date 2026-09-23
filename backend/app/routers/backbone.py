@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -38,9 +39,16 @@ def update_backbone(backbone_id: int, payload: BackboneCreate, db: Session = Dep
     backbone = db.get(Backbone, backbone_id)
     if not backbone:
         raise HTTPException(status_code=404, detail="Backbone introuvable")
+    duplicate = db.query(Backbone).filter(Backbone.name == payload.name, Backbone.id != backbone_id).first()
+    if duplicate:
+        raise HTTPException(status_code=409, detail="Un backbone avec ce nom existe déjà")
     for key, value in payload.model_dump().items():
         setattr(backbone, key, value)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Impossible de modifier ce backbone") from exc
     db.refresh(backbone)
     return backbone
 
@@ -51,4 +59,8 @@ def delete_backbone(backbone_id: int, db: Session = Depends(get_db), current_adm
     if not backbone:
         raise HTTPException(status_code=404, detail="Backbone introuvable")
     db.delete(backbone)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Ce backbone ne peut pas être supprimé") from exc

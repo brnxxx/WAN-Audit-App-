@@ -1,20 +1,18 @@
-import traceback
+import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.config import SECRET_KEY, SESSION_MAX_AGE_SECONDS
+from app.config import SECRET_KEY, SESSION_MAX_AGE_SECONDS, FRONTEND_ORIGINS
 from app.routers import auth, gns3, devices, sites, backbone, interfaces
 
 app = FastAPI(title="GNS3 Monitoring API")
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://127.0.0.1:5500", "http://localhost:5500",
-        "http://127.0.0.1:5173", "http://localhost:5173",
-    ],
+    allow_origins=FRONTEND_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,9 +37,8 @@ app.include_router(interfaces.router)
 
 @app.exception_handler(Exception)
 async def debug_exception_handler(request: Request, exc: Exception):
-    tb = traceback.format_exc()
-    print(tb)
-    return JSONResponse(status_code=500, content={"error": str(exc), "traceback": tb})
+    logger.exception("Unhandled API error on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Erreur interne du serveur"})
 
 
 @app.get("/")

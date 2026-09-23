@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Interface, Admin
+from app.models import Interface, Admin, Device
 from app.schemas import InterfaceCreate, InterfaceOut
 from app.routers.auth import get_current_admin
 
@@ -31,9 +32,17 @@ def get_interface(interface_id: int, db: Session = Depends(get_db), current_admi
 
 @router.post("", response_model=InterfaceOut, status_code=201)
 def create_interface(payload: InterfaceCreate, db: Session = Depends(get_db), current_admin: Admin = Depends(get_current_admin)):
+    if not db.get(Device, payload.device_id):
+        raise HTTPException(status_code=404, detail="Device introuvable")
+    if db.query(Interface).filter(Interface.device_id == payload.device_id, Interface.name == payload.name).first():
+        raise HTTPException(status_code=409, detail="Cette interface existe déjà pour cet équipement")
     interface = Interface(**payload.model_dump())
     db.add(interface)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Impossible de créer cette interface") from exc
     db.refresh(interface)
     return interface
 
@@ -43,9 +52,20 @@ def update_interface(interface_id: int, payload: InterfaceCreate, db: Session = 
     interface = db.get(Interface, interface_id)
     if not interface:
         raise HTTPException(status_code=404, detail="Interface introuvable")
+    duplicate = db.query(Interface).filter(
+        Interface.device_id == payload.device_id,
+        Interface.name == payload.name,
+        Interface.id != interface_id,
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=409, detail="Cette interface existe déjà pour cet équipement")
     for key, value in payload.model_dump().items():
         setattr(interface, key, value)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Impossible de modifier cette interface") from exc
     db.refresh(interface)
     return interface
 

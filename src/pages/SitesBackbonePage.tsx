@@ -48,7 +48,7 @@ export default function SitesBackbonePage() {
   }, [handleUnauthorized]);
 
   useEffect(() => {
-    loadAll();
+    void Promise.resolve().then(loadAll);
   }, [loadAll]);
 
   // ---------- Sites ----------

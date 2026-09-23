@@ -53,7 +53,7 @@ export default function EquipmentsPage() {
   }, [handleUnauthorized]);
 
   useEffect(() => {
-    loadAll();
+    void Promise.resolve().then(loadAll);
   }, [loadAll]);
 
   const types = useMemo(

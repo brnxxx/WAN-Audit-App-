@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -38,9 +39,16 @@ def update_site(site_id: int, payload: SiteCreate, db: Session = Depends(get_db)
     site = db.get(Site, site_id)
     if not site:
         raise HTTPException(status_code=404, detail="Site introuvable")
+    duplicate = db.query(Site).filter(Site.name == payload.name, Site.id != site_id).first()
+    if duplicate:
+        raise HTTPException(status_code=409, detail="Un site avec ce nom existe déjà")
     for key, value in payload.model_dump().items():
         setattr(site, key, value)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Impossible de modifier ce site") from exc
     db.refresh(site)
     return site
 
@@ -51,4 +59,8 @@ def delete_site(site_id: int, db: Session = Depends(get_db), current_admin: Admi
     if not site:
         raise HTTPException(status_code=404, detail="Site introuvable")
     db.delete(site)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Ce site ne peut pas être supprimé") from exc

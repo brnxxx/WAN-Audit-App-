@@ -14,6 +14,15 @@ DEVICE_SSH_USERNAME = os.getenv("DEVICE_SSH_USERNAME")
 DEVICE_SSH_PASSWORD = os.getenv("DEVICE_SSH_PASSWORD")
 GNS3_URL = os.getenv("GNS3_URL", "http://127.0.0.1:3080")
 
+FRONTEND_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv(
+        "FRONTEND_ORIGINS",
+        "http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,http://localhost:5500,http://127.0.0.1:5500",
+    ).split(",")
+    if origin.strip()
+]
+
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError(

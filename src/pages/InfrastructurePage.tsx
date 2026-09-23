@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo, type CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiGet, apiPost, API_BASE, UnauthorizedError } from "../api/client";
 import type { DeviceOut, GNS3Project, ImportResult } from "../api/types";
@@ -19,6 +19,7 @@ export default function InfrastructurePage() {
 
   const [devices, setDevices] = useState<DeviceOut[] | null>(null);
   const [devicesError, setDevicesError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const [importing, setImporting] = useState(false);
   const [importSummary, setImportSummary] = useState<{ text: string; error: boolean } | null>(null);
@@ -39,6 +40,35 @@ export default function InfrastructurePage() {
     }
   }, [handleUnauthorized]);
 
+  const summary = useMemo(() => {
+    const rows = devices || [];
+    return {
+      total: rows.length,
+      online: rows.filter((device) => device.status === "online").length,
+      offline: rows.filter((device) => device.status === "offline").length,
+      unassigned: rows.filter((device) => !device.site_id && !device.backbone_id).length,
+    };
+  }, [devices]);
+
+  const topology = useMemo(() => {
+    const rows = devices || [];
+    const groups = new Map<string, number>();
+    rows.forEach((device) => {
+      const key = device.site_name || device.backbone_name || "Non assigné";
+      groups.set(key, (groups.get(key) || 0) + 1);
+    });
+    return Array.from(groups.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  }, [devices]);
+
+  const visibleDevices = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!devices || !query) return devices || [];
+    return devices.filter((device) =>
+      [device.name, device.device_type, device.ip_address, device.site_name, device.backbone_name]
+        .some((value) => value?.toLowerCase().includes(query)),
+    );
+  }, [devices, search]);
+
   const loadDevices = useCallback(async () => {
     setDevices(null);
     try {
@@ -53,8 +83,7 @@ export default function InfrastructurePage() {
   }, [handleUnauthorized]);
 
   useEffect(() => {
-    loadProjects();
-    loadDevices();
+    void Promise.resolve().then(() => Promise.all([loadProjects(), loadDevices()]));
   }, [loadProjects, loadDevices]);
 
   async function handleImport() {
@@ -104,8 +133,50 @@ export default function InfrastructurePage() {
       </div>
 
       <div className="content">
-        <h1>Infrastructure</h1>
-        <p className="subtitle">Équipements synchronisés depuis GNS3 et stockés en base.</p>
+        <div className="page-heading">
+          <div>
+            <div className="eyebrow">NETWORK CONTROL CENTER / OVERVIEW</div>
+            <h1>Infrastructure</h1>
+            <p className="subtitle">Vue temps réel des équipements synchronisés depuis GNS3.</p>
+          </div>
+          <div className="live-indicator"><span className="pulse-dot" /> SYSTÈME OPÉRATIONNEL</div>
+        </div>
+
+        <div className="stats-grid">
+          <div className="stat-card"><span className="stat-label">ÉQUIPEMENTS</span><strong>{summary.total}</strong><span className="stat-meta">inventoriés</span></div>
+          <div className="stat-card accent"><span className="stat-label">EN LIGNE</span><strong>{summary.online}</strong><span className="stat-meta">connectés</span></div>
+          <div className="stat-card danger"><span className="stat-label">HORS LIGNE</span><strong>{summary.offline}</strong><span className="stat-meta">à vérifier</span></div>
+          <div className="stat-card warn"><span className="stat-label">À CLASSER</span><strong>{summary.unassigned}</strong><span className="stat-meta">sans rattachement</span></div>
+        </div>
+
+        <div className="monitor-grid">
+          <section className="monitor-card">
+            <div className="card-heading"><span className="eyebrow">TOPOLOGY / DISTRIBUTION</span><span className="card-icon">◈</span></div>
+            <h2>Répartition des équipements</h2>
+            {topology.length === 0 ? (
+              <p className="muted-copy">Importez un projet GNS3 pour initialiser la carte logique.</p>
+            ) : (
+              <div className="topology-bars">
+                {topology.map(([name, count]) => (
+                  <div className="topology-row" key={name}>
+                    <span title={name}>{name}</span>
+                    <div className="bar-track"><i style={{ width: `${Math.max(12, (count / summary.total) * 100)}%` }} /></div>
+                    <strong>{count}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+          <section className="monitor-card">
+            <div className="card-heading"><span className="eyebrow">HEALTH / SIGNAL</span><span className="card-icon">⌁</span></div>
+            <h2>État du parc</h2>
+            <div className="health-ring" style={{ "--health": `${summary.total ? (summary.online / summary.total) * 100 : 0}%` } as CSSProperties}>
+              <strong>{summary.total ? Math.round((summary.online / summary.total) * 100) : 0}%</strong>
+              <span>disponibilité</span>
+            </div>
+            <div className="health-caption"><span><i className="health-key ok" /> Opérationnels</span><b>{summary.online}</b><span><i className="health-key bad" /> À vérifier</span><b>{summary.offline + summary.unassigned}</b></div>
+          </section>
+        </div>
 
         <div className="control-bar">
           <label htmlFor="project-select">Projet GNS3</label>
@@ -129,6 +200,13 @@ export default function InfrastructurePage() {
             {importing ? "Import en cours..." : "Importer"}
           </button>
           <button className="refresh-btn" onClick={loadDevices}>Rafraîchir la liste</button>
+          <input
+            className="search-input"
+            type="search"
+            placeholder="Rechercher un équipement..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
 
           {importSummary && (
             <div className={`import-summary${importSummary.error ? " error" : ""}`}>
@@ -152,17 +230,17 @@ export default function InfrastructurePage() {
               {devices === null && (
                 <tr><td colSpan={5} className="empty-state">Chargement...</td></tr>
               )}
-              {devices !== null && devices.length === 0 && !devicesError && (
+              {devices !== null && visibleDevices.length === 0 && !devicesError && (
                 <tr>
                   <td colSpan={5} className="empty-state">
-                    Aucun équipement en base. Importe un projet GNS3 pour commencer.
+                    {search ? "Aucun équipement ne correspond à cette recherche." : "Aucun équipement en base. Importe un projet GNS3 pour commencer."}
                   </td>
                 </tr>
               )}
               {devicesError && (
                 <tr><td colSpan={5} className="empty-state">{devicesError}</td></tr>
               )}
-              {devices?.map((d) => (
+              {visibleDevices.map((d) => (
                 <tr key={d.id}>
                   <td>{d.name}</td>
                   <td><span className="type-tag">{d.device_type}</span></td>

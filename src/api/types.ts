@@ -38,6 +38,25 @@ export interface ImportResult {
   links_updated: number;
   unmatched_site_warning: string[];
 }
+export interface GNS3Node {
+  node_id: string;
+  name: string;
+  node_type: string;
+  status?: string;
+}
+export interface GNS3Command {
+  platform: string;
+  category: string;
+  command: string;
+  purpose: string;
+  risk: "read-only" | "state-changing";
+}
+export interface PingResult {
+  target: string;
+  reachable: boolean;
+  return_code: number;
+  output: string;
+}
 export interface SiteOut {
   id: number;
   name: string;
